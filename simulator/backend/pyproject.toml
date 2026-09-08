@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "p2p-simulator"
+version = "0.1.0"
+description = "Deterministic Binance-P2P-like simulator for P2PBot"
+requires-python = ">=3.12"
+dependencies = [
+  "fastapi>=0.115,<1",
+  "uvicorn>=0.34,<1",
+  "SQLAlchemy>=2.0,<3",
+  "pydantic>=2.10,<3",
+  "pydantic-settings>=2.7,<3",
+  "httpx>=0.27,<1",
+]
+
+[project.optional-dependencies]
+postgres = ["psycopg[binary]>=3.2,<4"]
+dev = ["pytest>=8,<10"]
+
+[project.scripts]
+p2psim = "p2psim.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["p2psim*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
