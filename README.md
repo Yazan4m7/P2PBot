@@ -1,100 +1,111 @@
-# Binance P2P Bot — Phases 1–3
+# P2PBot
 
-A **read-only** implementation of:
+Binance P2P market research and paper-automation service, configured by default for USDT/JOD.
 
-1. **Market scanner** — downloads public Binance P2P ads for BUY/SELL.
-2. **Opportunity engine** — pairs feasible buy/sell ads and calculates gross/net spread after configurable slippage, platform fees and bank fees.
-3. **Merchant scoring** — scores merchant quality from completion rate, order history, release time, payment-method compatibility and merchant type.
+## Phase status
 
-It does **not** create orders, mark orders paid, release crypto, withdraw funds or access a bank account.
+| Phase | Status |
+|---|---|
+| 1 Market scanner | Implemented: public P2P ads + persistence |
+| 2 Opportunity engine | Implemented: spread, limits, slippage, fees, ROI |
+| 3 Merchant scoring | Implemented |
+| 4 Paper trading | Implemented: complete simulated lifecycle + P&L |
+| 5 Authenticated Binance | Implemented read-only: personal P2P history + capability probe |
+| 6 Order state machine | Implemented; no undocumented live order placement |
+| 7 Idempotency | Implemented with persistent keys |
+| 8 Banking | Adapter boundary and transfer proposals only |
+| 9 Payment matching | Implemented: amount/currency/time/status/name verification |
+| 10 Inventory | Implemented |
+| 11 Dynamic ads | Pricing proposals; live merchant writes not assumed |
+| 12 Risk engine | Implemented |
+| 13 Circuit breakers | Persistent kill switch implemented |
+| 14 Reconciliation | Implemented |
+| 15 Dashboard | Implemented at `/dashboard` |
+| 16 Event logging | Implemented |
+| 17 Deployment | Docker/PostgreSQL + GitHub CI |
+| 18 Continuous loop | Read-only scanning and paper execution |
 
-## Requirements
-
-- Python 3.12+
-- SQLite works out of the box. PostgreSQL is supported by installing the optional `postgres` dependency and changing `DATABASE_URL`.
+The repository deliberately does not automate Binance/banking UI clicks, unattended fiat transfers, or crypto release. The account capability probe determines which documented authenticated P2P features the configured Binance API key actually has.
 
 ## Install
 
 ```bash
 python -m venv .venv
 # Windows
-.venv\\Scripts\\activate
+.venv\Scripts\activate
 pip install -e ".[dev]"
 copy .env.example .env
 ```
 
-Linux/macOS:
+Linux/macOS: activate `.venv/bin/activate` and copy `.env.example` to `.env`.
 
-```bash
-source .venv/bin/activate
-pip install -e ".[dev]"
-cp .env.example .env
-```
-
-## Test
+## Tests
 
 ```bash
 pytest
 ```
 
-## One live scan
+The suite covers public parsing/client behavior, opportunity logic, merchant scoring, signed SAPI requests, capability probing, state transitions, risk controls, payment verification, inventory, reconciliation, paper execution, event logging, idempotency and the kill switch.
+
+## Public scanner
 
 ```bash
 p2pbot scan --fiat JOD --asset USDT
-```
-
-## Continuous scanner
-
-```bash
 p2pbot run --fiat JOD --asset USDT --interval 10
 ```
 
-Every scan stores ad snapshots, merchant observations and detected opportunities in the configured database.
-
-## API
+## Paper execution
 
 ```bash
-uvicorn p2pbot.api:app --reload
+p2pbot paper --fiat JOD --asset USDT
+p2pbot paper-run --fiat JOD --asset USDT --interval 10
+p2pbot paper-trades
 ```
 
-Endpoints:
+## Optional authenticated account sync
 
-- `GET /health`
-- `POST /scan?fiat=JOD&asset=USDT`
-- `GET /opportunities?limit=50`
-
-## Important configuration
-
-Edit `.env`:
+A Binance browser login is not an API credential. For read-only personal P2P history/capability probing, create an API key with the minimum required permissions and set these only in your local environment or secret manager:
 
 ```dotenv
-MIN_COMPLETION_RATE=95
-MIN_MERCHANT_ORDERS=20
-MIN_NET_ROI_PCT=0.20
-MAX_TRADE_FIAT=500
-SLIPPAGE_BPS_PER_LEG=5
-PLATFORM_FEE_BPS_PER_LEG=0
-FIXED_BANK_FEE_BUY=0
-FIXED_BANK_FEE_SELL=0
-PREFERRED_PAYMENT_METHODS=
+BINANCE_API_KEY=...
+BINANCE_API_SECRET=...
 ```
 
-Payment-method values must be the exact identifiers Binance returns for the selected fiat. Leaving the setting blank accepts any method.
+Then run:
 
-## Database tables
+```bash
+p2pbot capabilities
+p2pbot sync-orders --rows 50
+```
 
-- `merchants`
-- `ad_snapshots`
-- `opportunities`
+Do not commit real keys.
 
-## Notes on BUY/SELL
+## API and dashboard
 
-The implementation follows Binance's current public P2P agent API semantics: `BUY` means the user is buying the crypto asset; `SELL` means the user is selling it. An opportunity therefore requires `SELL price > BUY price` after costs.
+```bash
+uvicorn p2pbot.api:app --host 0.0.0.0 --port 8000
+```
 
-## Public Binance endpoints used
+Main endpoints:
 
-- `/bapi/c2c/v1/public/c2c/agent/ad-list`
-- `/bapi/c2c/v1/public/c2c/agent/trade-methods`
-- `/bapi/c2c/v1/public/c2c/agent/check-version`
+- `GET /health`
+- `GET /status`
+- `POST /scan`
+- `POST /paper/run`
+- `GET /paper/trades`
+- `GET /opportunities`
+- `GET /events`
+- `GET /capabilities`
+- `POST /account/orders/sync`
+- `GET /account/orders`
+- `POST /kill-switch/true`
+- `POST /kill-switch/false`
+- `GET /dashboard`
 
-No credentials are used by phases 1–3.
+## Docker
+
+```bash
+docker compose up --build
+```
+
+This starts the API and PostgreSQL. Live money actions remain disabled.
