@@ -6,7 +6,12 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file='.env', env_file_encoding='utf-8', extra='ignore')
+    model_config = SettingsConfigDict(
+        env_file='.env',
+        env_file_encoding='utf-8',
+        extra='ignore',
+        enable_decoding=False,
+    )
 
     binance_mgs_base: str = 'https://www.binance.com'
     binance_api_base: str = 'https://api.binance.com'
@@ -45,8 +50,6 @@ class Settings(BaseSettings):
     inventory_low_asset_pct: float = Field(default=20.0, ge=0, le=100)
     inventory_high_asset_pct: float = Field(default=80.0, ge=0, le=100)
 
-    # Deliberately false by default. This codebase does not perform unattended
-    # fiat transfers or crypto release; external adapters can only propose actions.
     live_money_actions_enabled: bool = False
 
     @field_validator('default_fiat', 'default_asset')
@@ -60,6 +63,15 @@ class Settings(BaseSettings):
         if value is None or value == '':
             return []
         if isinstance(value, str):
+            stripped = value.strip()
+            if stripped.startswith('[') and stripped.endswith(']'):
+                import json
+                try:
+                    parsed = json.loads(stripped)
+                except json.JSONDecodeError:
+                    parsed = None
+                if isinstance(parsed, list):
+                    return [str(part).strip().upper() for part in parsed if str(part).strip()]
             return [part.strip().upper() for part in value.split(',') if part.strip()]
         return [str(part).strip().upper() for part in value if str(part).strip()]
 
