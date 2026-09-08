@@ -1,10 +1,13 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from datetime import timedelta
 from decimal import Decimal
 from difflib import SequenceMatcher
+import random
+import uuid
 
-from .domain import PaymentExpectation, PaymentRecord
+from .domain import PaymentExpectation, PaymentRecord, utcnow
 
 
 class MoneyActionDisabled(RuntimeError):
@@ -32,10 +35,68 @@ class BankAdapter:
 
 @dataclass(slots=True)
 class MemoryBankAdapter(BankAdapter):
-    transactions: list[PaymentRecord]
+    transactions: list[PaymentRecord] = field(default_factory=list)
 
     def recent_transactions(self) -> list[PaymentRecord]:
         return list(self.transactions)
+
+
+class MockBankAdapter(MemoryBankAdapter):
+    """Synthetic transaction source used until a real read-only bank adapter exists."""
+
+    def __init__(self, *, seed: int | None = None):
+        super().__init__([])
+        self._rng = random.Random(seed)
+
+    def simulate_for(self, expectation: PaymentExpectation, scenario: str = 'success') -> list[PaymentRecord]:
+        if scenario == 'bank_missing':
+            return []
+
+        amount = expectation.amount
+        name = expectation.counterparty_name
+        booked_at = utcnow()
+        status = 'BOOKED'
+        if scenario == 'wrong_amount':
+            amount += Decimal('1.00')
+        elif scenario == 'wrong_name':
+            name = 'Different Sender'
+        elif scenario == 'pending':
+            status = 'PENDING'
+        elif scenario == 'delayed':
+            booked_at = expectation.not_after + timedelta(minutes=5)
+
+        transaction = PaymentRecord(
+            transaction_id=uuid.uuid4().hex,
+            amount=amount,
+            currency=expectation.currency.upper(),
+            direction=expectation.direction.upper(),
+            counterparty_name=name,
+            booked_at=booked_at,
+            status=status,
+        )
+        self.transactions.append(transaction)
+
+        if scenario == 'duplicate':
+            duplicate = PaymentRecord(
+                transaction_id=uuid.uuid4().hex,
+                amount=transaction.amount,
+                currency=transaction.currency,
+                direction=transaction.direction,
+                counterparty_name=transaction.counterparty_name,
+                booked_at=transaction.booked_at,
+                status=transaction.status,
+            )
+            self.transactions.append(duplicate)
+            return [transaction, duplicate]
+
+        return [transaction]
+
+    def random_scenario(self) -> str:
+        return self._rng.choices(
+            ['success', 'bank_missing', 'wrong_amount', 'wrong_name', 'pending', 'delayed', 'duplicate'],
+            weights=[76, 5, 5, 3, 4, 3, 4],
+            k=1,
+        )[0]
 
 
 def _name_similarity(a: str | None, b: str | None) -> float:
