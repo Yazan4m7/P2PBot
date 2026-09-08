@@ -13,8 +13,8 @@ Binance P2P market research and paper-automation service, configured by default 
 | 5 Authenticated Binance | Implemented read-only: personal P2P history + capability probe |
 | 6 Order state machine | Implemented; no undocumented live order placement |
 | 7 Idempotency | Implemented with persistent keys |
-| 8 Banking | Adapter boundary and transfer proposals only |
-| 9 Payment matching | Implemented: amount/currency/time/status/name verification |
+| 8 Banking | Adapter boundary + synthetic bank transaction source |
+| 9 Payment matching | Implemented: bank + SMS verification with mock failure scenarios |
 | 10 Inventory | Implemented |
 | 11 Dynamic ads | Pricing proposals; live merchant writes not assumed |
 | 12 Risk engine | Implemented |
@@ -25,7 +25,18 @@ Binance P2P market research and paper-automation service, configured by default 
 | 17 Deployment | Docker/PostgreSQL + GitHub CI |
 | 18 Continuous loop | Read-only scanning and paper execution |
 
-The repository deliberately does not automate Binance/banking UI clicks, unattended fiat transfers, or crypto release. The account capability probe determines which documented authenticated P2P features the configured Binance API key actually has.
+The repository deliberately does not automate banking UI clicks, unattended fiat transfers, or crypto release. Mock SMS and bank adapters are used to exercise verification logic until real read-only integrations are available.
+
+## Mock payment verification
+
+The bot-side payment boundary is replaceable:
+
+- `MockSmsAdapter` mimics the future Android SMS bridge.
+- `MockBankAdapter` mimics a future read-only bank transaction feed.
+- `MockPaymentEnvironment` generates success and failure scenarios: missing SMS, missing transaction, wrong amount/name, pending, delayed and duplicate records.
+- `verify_payment()` requires a final matching bank transaction and, by default, a matching SMS before returning `VERIFIED`.
+
+No mock component moves real money.
 
 ## Install
 
@@ -45,7 +56,7 @@ Linux/macOS: activate `.venv/bin/activate` and copy `.env.example` to `.env`.
 pytest
 ```
 
-The suite covers public parsing/client behavior, opportunity logic, merchant scoring, signed SAPI requests, capability probing, state transitions, risk controls, payment verification, inventory, reconciliation, paper execution, event logging, idempotency and the kill switch.
+The suite covers public parsing/client behavior, opportunity logic, merchant scoring, signed SAPI requests, capability probing, state transitions, risk controls, payment verification, mock SMS/bank scenarios, inventory, reconciliation, paper execution, event logging, idempotency and the kill switch.
 
 ## Public scanner
 
